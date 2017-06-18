@@ -1,0 +1,111 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Santiago Lovón García"
+date: "17 de junio de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introducctión
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+Our goal in this project is to predict the manner in which they did the exercise, using the variables and data provided by the Weight Lifting Exercise Dataset.
+
+# Data Procesing
+## Package loading
+We load the packages we are going to use 
+```{r, cache = T,   message=FALSE}
+library(caret)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(repmis)
+```  
+
+## Downloading and loading data
+We download the files from the provided URLs
+```{r, cache = T}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(trainUrl, destfile="entrenamiento.csv", method="curl")
+download.file(testUrl, destfile="prueba.csv", method="curl")
+```  
+
+## Data Cleaning
+We load the CSV replacing the NA values
+```{r, cache = T}
+entrenamiento <- read.csv("entrenamiento.csv", na.strings = c("NA", ""))
+prueba <- read.csv("prueba.csv", na.strings = c("NA", ""))
+```  
+
+We delete the columns (predictors) that have missing values
+```{r, cache = T}
+entrenamiento <- entrenamiento[, colSums(is.na(entrenamiento)) == 0] 
+prueba <- prueba[, colSums(is.na(prueba)) == 0] 
+```  
+
+When we look at the predictors, we can see that the first 7, wont have any relation with the data we are trying to predict(X, user_name, raw_timestamp, cvtd_timestamp, new_window, num_window) so we remove them from both datasets
+
+```{r, cache = T}
+colnames (entrenamiento)
+entrenamiento <- entrenamiento[, colSums(is.na(entrenamiento)) == 0] 
+prueba <- prueba[, colSums(is.na(prueba)) == 0] 
+```  
+Now the datasets have both 53 predictors. The training dataset has 19622 rows and the test dataset has 20 rows.
+
+## Data Splitting
+We are going to split the training data in an other training set, and a validation training set, so we can cross validate the training data.
+```{r, cache = T}
+set.seed(1) 
+inTrain <- createDataPartition(entrenamiento$classe, p = 0.7, list = FALSE)
+entrenar <- entrenamiento[inTrain, ]
+validar <- entrenamiento[-inTrain, ]
+```  
+Now we have 3 data sets, one for training, another for crossvalidating, and the other for testing.
+
+# Model selection
+## Classification trees
+We will first try to predict using Classification trees, for that we fit a model using crossvalidation as control method, and plot our tree. 
+```{r, cache = T}
+control <- trainControl(method = "cv")
+fit_rpart <- train(classe ~ ., data = entrenar, method = "rpart", trControl = control)
+print(fit_rpart, digits = 4)
+
+fancyRpartPlot(fit_rpart$finalModel)
+
+```  
+Next we need to crossvalidate to test how good are we predicting the results.
+```{r, cache = T}
+predict_rpart <- predict(fit_rpart, validar)
+confusionMatrix(validar$classe, predict_rpart)$overall[1]
+```  
+We see that we have a 50 % accuracy, and sadly thats not enough, it is like if we were tossing a coin, and we need to get better results. 
+
+## Random Forest
+Our next model will be random forest, we fit our model using the same control as before .
+```{r, cache = T}
+
+fit_rf <- train(classe ~ ., data = entrenar, method = "rf", trControl = control)
+print(fit_rf, digits = 4)
+
+```  
+Next we crossvalidate our data.
+```{r, cache = T}
+predict_rf <- predict(fit_rf, validar)
+confusionMatrix(validar$classe, predict_rf)$overall[1]
+
+```  
+We found that our accuracy is 95%, and we realize that this method is far better than classification trees, and thats why we will pick this one as our model.
+
+# Prediction on Test Set
+Now that we have a model we will use it to predict the values of our testing set. 
+```{r, cache = T}
+(predict(fit_rf, prueba))
+
+```  
+
